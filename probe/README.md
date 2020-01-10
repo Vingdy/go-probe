@@ -47,4 +47,4 @@ make run
 
 其他办法：  
   
-摸索中  
+直接make run
