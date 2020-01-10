@@ -10,7 +10,7 @@ build:
 run:
         chmod 777 $(BINARY_NAME)
         nohup ./$(BINARY_NAME) &
-deps:
+get:
         $(GOGET) github.com/mikemintang/go-curl
         $(GOGET) github.com/hashicorp/consul/api
 

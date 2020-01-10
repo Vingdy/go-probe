@@ -37,6 +37,8 @@ quick start:
   
 安装go环境  
 
+在上层目录make get安装依赖
+
 make build
 
 make run
