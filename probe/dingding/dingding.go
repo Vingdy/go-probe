@@ -26,8 +26,8 @@ func SendPost(serverInfo []model.ServerVersionInfo) {
 	postData := map[string]interface{}{
 		"msgtype": "markdown",
 		"markdown": map[string]interface{}{
-			"title": "版本号",
-			"text": "### adn_tracking版本" + "\n" +
+			"title": "adn_tracking版本号检查",
+			"text": "### adn_tracking版本号检查" + "\n" +
 				"#### 服务器地区：" + serverInfo[0].ServerRegion + "   总数量:" + strconv.Itoa(serverInfo[0].Number) + "\n" +
 				version_text,
 		},
