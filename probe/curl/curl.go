@@ -14,9 +14,8 @@ import (
 	"strings"
 )
 
-
-
 var ServerInfo = []model.ServerVersionInfo{}
+
 /*var ServerInfo = []ServerVersionInfo{
 	ServerVersionInfo{
 		ServerRegion:"fk",
@@ -57,6 +56,15 @@ func GetIps(w http.ResponseWriter, r *http.Request) {
 	for _, region := range watcher.ServerIP.IpInfo {
 		for _, ip := range region.IP {
 			re, err := Send(ip + "/version")
+			//暂时写死
+			//tk Redis
+			if re == "" {
+				re = ip+"的version为空"
+			}
+			//tk 发版中
+			if re == "\u003chtml\u003e\r\n\u003chead\u003e\u003ctitle\u003e502" {
+				re = "发版中:502"
+			}
 			if err == nil {
 				HandleVersion(re)
 			}
@@ -69,7 +77,7 @@ func GetIps(w http.ResponseWriter, r *http.Request) {
 }
 
 func Exec_shell(cmd string, ip string) (string, error) {
-	command := exec.Command(cmd,ip)
+	command := exec.Command(cmd, ip)
 	var out bytes.Buffer
 	var outerr bytes.Buffer
 	command.Stdout = &out

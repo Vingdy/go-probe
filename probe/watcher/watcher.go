@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"fmt"
 	"github.com/hashicorp/consul/api"
 	"probe/model"
 	"probe/utils"
@@ -25,21 +26,19 @@ var (
 	}
 )
 
-//var DefaultWatcher = NewWatcher()
-
-
+var DefaultWatcher = NewWatcher()
 
 type Watcher struct {
 }
 
-//var ServerIP = ServerPraviteIP{}
-var ServerIP = model.ServerPraviteIP{IpInfo:[]model.IPInfo{
-		{
-			"fk",
-			3,
-			[]string{"54.175.192.163","34.233.128.129","34.234.66.169",},
-		},
-},}
+var ServerIP = model.ServerPraviteIP{}
+/*var ServerIP = model.ServerPraviteIP{IpInfo: []model.IPInfo{
+	{
+		"fk",
+		3,
+		[]string{"54.175.192.163", "34.233.128.129", "34.234.66.169"},
+	},
+}}*/
 
 func NewWatcher() *Watcher {
 	watcher := &Watcher{}
@@ -62,22 +61,33 @@ func (w *Watcher) DoDiscover(consul_addr string, found_service string) {
 
 func FindAdnTracking(node_name string) (string, string, bool) {
 	s := strings.Split(node_name, "_")
+	isFind := false
 	for _, region := range region_filter {
 		if region == s[0] {
-			return "", "", false
+			isFind = true
 		}
 	}
+	if !isFind{
+		return "", "", false
+	}
+	isFind = false
 	for _, ad_type := range ad_type_filter {
 		if ad_type == s[1] {
-			return "", "", false
+			isFind = true
 		}
 	}
+	if !isFind{
+		return "", "", false
+	}
+	isFind = false
 	adn_type := strings.Split(s[2], ":")
-
 	for _, server := range server_filter {
-		if server == adn_type[0] {
-			return "", "", false
+		if server == adn_type[0] && !strings.Contains(adn_type[0],"Redis") {
+			isFind = true
 		}
+	}
+	if !isFind{
+		return "", "", false
 	}
 	return s[0], adn_type[1], true
 }
@@ -104,6 +114,7 @@ func (w *Watcher) DiscoverServices(addr string, healthyOnly bool, service_name s
 	for _, service := range services {
 
 		region, real_ip, find := FindAdnTracking(service.Node.Node)
+		fmt.Println(service.Node.Node,real_ip)
 		if !find {
 			continue
 		}
@@ -120,7 +131,6 @@ func (w *Watcher) DiscoverServices(addr string, healthyOnly bool, service_name s
 				ServerIP.IpInfo[ip].Number++
 			}
 		}
+	
 	}
 }
-
-
