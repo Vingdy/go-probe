@@ -1,145 +1,89 @@
 package watcher
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/hashicorp/consul/api"
-	"log"
-	"math/rand"
-	"os"
-	"os/signal"
-	"strconv"
+	"probe/model"
+	"probe/utils"
 	"strings"
-	"sync"
 	"time"
 )
 
-type ServerPraviteIP struct {
-	IpInfo []IPInfo
-}
-
-type IPInfo struct{
-	Region string
-	Number int
-	IP []string
-}
-
-//var ServerPraviteIP []string
-
-var defaultWatcher = NewWatcher()
-
 var (
-	servics_map     = make(map[string]ServiceList)
-	service_locker  = new(sync.Mutex)
-	consul_client   *api.Client
-	my_service_id   string
-	my_service_name string
-	my_kv_key       string
+	region_filter = []string{
+		"vg",
+		"sg",
+		"fk",
+	}
+	ad_type_filter = []string{
+		"adn",
+	}
+	server_filter = []string{
+		"tktracking",
+		"tktrackingStaticPostback",
+		"tktrackingForRta",
+		"tktrackingInstallService",
+	}
 )
 
-type KVData struct {
-	IP        string `json:"ip"`
-	Load      int    `json:"load"`
-	Timestamp int    `json:"ts"`
-}
+//var DefaultWatcher = NewWatcher()
+
+
 
 type Watcher struct {
-	register ServiceList
 }
 
-type ServiceInfo struct {
-	ServiceID string
-	IP        string
-	Port      int
-	Load      int
-	Timestamp int //load updated ts
-}
-
-type ServiceList []ServiceInfo
+//var ServerIP = ServerPraviteIP{}
+var ServerIP = model.ServerPraviteIP{IpInfo:[]model.IPInfo{
+		{
+			"fk",
+			3,
+			[]string{"54.175.192.163","34.233.128.129","34.234.66.169",},
+		},
+},}
 
 func NewWatcher() *Watcher {
-	watcher := &Watcher{
+	watcher := &Watcher{}
 
-	}
-
-	my_service_name = "worker"
-
-	//DoRegistService("localhost:8500", "127.0.0.1:54321", "worker", "127.0.0.1", 4300)
-	//go watcher.watch()
-	go DoDiscover("localhost:8500", "consul")
-	//go discover("localhost:8500", "consul")
-	//go WaitToUnRegistService()
-
-	//go DoUpdateKeyValue("localhost:8500", "worker", "127.0.0.1", 4300)
+	go watcher.DoDiscover("localhost:8500", "consul")
 
 	return watcher
 }
 
-func discover(consul_addr string, found_service string) {
-	during := time.Duration(5)
-	tick := time.NewTicker(time.Second * during)
-
-	for range tick.C {
-		discoverServices("localhost:8500",true, "worker")
-	}
-}
-
-func discoverServices(addr string, healthyOnly bool, service_name string) {
-
-	consulConf := api.DefaultConfig()
-	consulConf.Address = addr
-	//client, err := api.NewClient(consulConf)
-	//CheckErr(err)
-
-	/*services, _, err := client.Health().Service(&client, "", true, &api.QueryOptions{
-		WaitIndex: w.lastIndex, // 同步点，这个调用将一直阻塞，直到有新的更新
-	})
-	if err != nil {
-		//logrus.Warn("error retrieving instances from Consul: %v", err)
-		log.Fatal("")
-	}
-	//w.lastIndex = metainfo.LastIndex
-
-	addrs := map[string]struct{}{}
-	for _, service := range services {
-		addrs[net.JoinHostPort(service.Service.Address, strconv.Itoa(service.Service.Port))] = struct{}{}
-	}*/
-}
-/*func (w *Watcher) watch() {
-	during := time.Duration(5)
-	tick := time.NewTicker(time.Second * during)
-	for range tick.C {
-		DiscoverServices("localhost:8500",true, "worker")
-	}
-}*/
-
-func DoDiscover(consul_addr string, found_service string) {
-	during := time.Duration(5)
+func (w *Watcher) DoDiscover(consul_addr string, found_service string) {
+	during := time.Duration(10)
 	tick := time.NewTicker(time.Second * during)
 	for {
 		select {
 		case <-tick.C:
-			DiscoverServices(consul_addr, true, found_service)
+			w.DiscoverServices(consul_addr, true, found_service)
 		}
 	}
 }
 
-func FindAdnTracking(node_name string) (string, bool) {
-	s := strings.Split(node_name,"_")
-	if s[0] != "vg" && s[0] != "fk" && s[0] != "sg" {
-		return "", false
+func FindAdnTracking(node_name string) (string, string, bool) {
+	s := strings.Split(node_name, "_")
+	for _, region := range region_filter {
+		if region == s[0] {
+			return "", "", false
+		}
 	}
-	if s[1] != "adn" {
-		return "", false
+	for _, ad_type := range ad_type_filter {
+		if ad_type == s[1] {
+			return "", "", false
+		}
 	}
-	if !strings.Contains(s[2],"tracking") {
-		return "", false
+	adn_type := strings.Split(s[2], ":")
+
+	for _, server := range server_filter {
+		if server == adn_type[0] {
+			return "", "", false
+		}
 	}
-	return s[0], true
+	return s[0], adn_type[1], true
 }
 
 func IsNewRegion(region string) bool {
-	for _, ipinfo := range ServerIP.IpInfo{
+	for _, ipinfo := range ServerIP.IpInfo {
 		if region == ipinfo.Region {
 			return false
 		}
@@ -147,131 +91,36 @@ func IsNewRegion(region string) bool {
 	return true
 }
 
-var ServerIP = ServerPraviteIP{}
-
-func DiscoverServices(addr string, healthyOnly bool, service_name string) {
+func (w *Watcher) DiscoverServices(addr string, healthyOnly bool, service_name string) {
 	consulConf := api.DefaultConfig()
 	consulConf.Address = addr
 	client, err := api.NewClient(consulConf)
-	CheckErr(err)
+	utils.CheckErr(err)
 
-	nodes, _, err := client.Catalog().Nodes(&api.QueryOptions{})
-	CheckErr(err)
+	services, _, err := client.Health().Service("adn_tracking", "", true, &api.QueryOptions{})
+	utils.CheckErr(err)
 
-	ServerIP=ServerPraviteIP{}
-	for _, name := range nodes {
-		region,find := FindAdnTracking(name.Node)
-		//fmt.Println(region,find)
+	ServerIP = model.ServerPraviteIP{}
+	for _, service := range services {
+
+		region, real_ip, find := FindAdnTracking(service.Node.Node)
 		if !find {
 			continue
 		}
 		if IsNewRegion(region) {
-			ServerIP.IpInfo=append(ServerIP.IpInfo,IPInfo{
+			ServerIP.IpInfo = append(ServerIP.IpInfo, model.IPInfo{
 				Region: region,
 				Number: 0,
 				IP:     nil,
 			})
 		}
-		for ip:=0;ip<len(ServerIP.IpInfo);ip++ {
+		for ip := 0; ip < len(ServerIP.IpInfo); ip++ {
 			if ServerIP.IpInfo[ip].Region == region {
-				ServerIP.IpInfo[ip].IP = append(ServerIP.IpInfo[ip].IP, name.Address)
+				ServerIP.IpInfo[ip].IP = append(ServerIP.IpInfo[ip].IP, real_ip)
 				ServerIP.IpInfo[ip].Number++
 			}
 		}
-		//fmt.Println(region,ServerIP)
-	}
-	fmt.Println(ServerIP)
-	service_locker.Lock()
-	service_locker.Unlock()
-}
-
-func CheckErr(err error) {
-	if err != nil {
-		log.Printf("error: %v", err)
-		os.Exit(1)
-	}
-}
-
-func GetKeyValue(service_name string, ip string, port int) string {
-	key := service_name + "/" + ip + ":" + strconv.Itoa(port)
-
-	kv, _, err := consul_client.KV().Get(key, nil)
-	if kv == nil {
-		return ""
-	}
-	CheckErr(err)
-
-	return string(kv.Value)
-}
-
-func DoRegistService(consul_addr string, monitor_addr string, service_name string, ip string, port int) {
-	my_service_id = service_name + "-" + ip
-	var tags []string
-	service := &api.AgentServiceRegistration{
-		ID:      my_service_id,
-		Name:    service_name,
-		Port:    port,
-		Address: ip,
-		Tags:    tags,
-		Check: &api.AgentServiceCheck{
-			HTTP:     "http://" + monitor_addr + "/status",
-			Interval: "5s",
-			Timeout:  "1s",
-		},
-	}
-
-	client, err := api.NewClient(api.DefaultConfig())
-	if err != nil {
-		log.Fatal(err)
-	}
-	consul_client = client
-	if err := consul_client.Agent().ServiceRegister(service); err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Registered service %q in consul with tags %q", service_name, strings.Join(tags, ","))
-}
-
-func WaitToUnRegistService() {
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, os.Kill)
-	<-quit
-
-	if consul_client == nil {
-		return
-	}
-	if err := consul_client.Agent().ServiceDeregister(my_service_id); err != nil {
-		log.Fatal(err)
 	}
 }
 
 
-func DoUpdateKeyValue(consul_addr string, service_name string, ip string, port int) {
-	t := time.NewTicker(time.Second * 10)
-	for {
-		select {
-		case <-t.C:
-			StoreKeyValue(consul_addr, service_name, ip, port)
-		}
-	}
-}
-
-func StoreKeyValue(consul_addr string, service_name string, ip string, port int) {
-
-	my_kv_key = my_service_name + "/" + ip + ":" + strconv.Itoa(port)
-
-	var data KVData
-	data.IP = ip
-	data.Load = rand.Intn(100)
-	data.Timestamp = int(time.Now().Unix())
-	bys, _ := json.Marshal(&data)
-
-	kv := &api.KVPair{
-		Key:   my_kv_key,
-		Flags: 0,
-		Value: bys,
-	}
-
-	_, err := consul_client.KV().Put(kv, nil)
-	CheckErr(err)
-	fmt.Println(" store data key:", kv.Key, " value:", string(bys))
-}
